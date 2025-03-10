@@ -17,24 +17,42 @@ from lightgbm import LGBMClassifier
 # ===============================
 # 🔹 تعريف المسارات الرئيسية
 # ===============================
-BASE_DIR = "models"
-os.makedirs(BASE_DIR, exist_ok=True)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # التعرف تلقائيًا على مسار الملف الحالي
+MODELS_DIR = os.path.join(BASE_DIR, "models")
+DATA_DIR = BASE_DIR  # إذا كانت البيانات في نفس مجلد الكود
 
-autoencoder_path = os.path.join(BASE_DIR, "autoencoder_model.keras")
-xgb_path = os.path.join(BASE_DIR, "xgboost_model.pkl")
-lgbm_path = os.path.join(BASE_DIR, "lightgbm_model.pkl")
-stacked_path = os.path.join(BASE_DIR, "stacked_model.pkl")
-accuracy_results_path = os.path.join(BASE_DIR, "accuracy_results.json")
+os.makedirs(MODELS_DIR, exist_ok=True)
+
+# مسارات الملفات
+autoencoder_path = os.path.join(MODELS_DIR, "autoencoder_model.keras")
+xgb_path = os.path.join(MODELS_DIR, "xgboost_model.pkl")
+lgbm_path = os.path.join(MODELS_DIR, "lightgbm_model.pkl")
+stacked_path = os.path.join(MODELS_DIR, "stacked_model.pkl")
+accuracy_results_path = os.path.join(MODELS_DIR, "accuracy_results.json")
+train_data_path = os.path.join(DATA_DIR, "final_classified_loss_with_reasons_60_percent_ordered.xlsx")
+
+# ===============================
+# 🔹 التحقق من الملفات قبل تحميلها
+# ===============================
+def check_file_exists(file_path, file_type="ملف"):
+    """ التحقق مما إذا كان الملف موجودًا وإعطاء رسالة مناسبة """
+    if not os.path.exists(file_path):
+        st.error(f"❌ خطأ: {file_type} غير موجود! تأكد من رفعه: {file_path}")
+        return False
+    return True
+
+# التحقق من وجود ملفات البيانات والنماذج
+if not all([check_file_exists(autoencoder_path, "نموذج Autoencoder"),
+            check_file_exists(xgb_path, "نموذج XGBoost"),
+            check_file_exists(lgbm_path, "نموذج LightGBM"),
+            check_file_exists(stacked_path, "نموذج Stacked"),
+            check_file_exists(train_data_path, "ملف بيانات التدريب")]):
+    st.stop()  # إيقاف التطبيق إذا كانت هناك ملفات ناقصة
 
 # ===============================
 # 🔹 تحميل البيانات المصنفة للتدريب
 # ===============================
-train_data_path = "final_classified_loss_with_reasons_60_percent_ordered.xlsx"
 df = pd.read_excel(train_data_path)
-
-# ===============================
-# 🔹 معالجة البيانات
-# ===============================
 df.fillna(df.select_dtypes(include=[np.number]).mean(), inplace=True)
 df["Loss_Status"] = df["Loss_Status"].apply(lambda x: 1 if x == "Loss" else 0)
 
@@ -65,13 +83,16 @@ threshold = np.percentile(mse, 95)  # العتبة عند 95%
 # 🔹 تصميم واجهة المستخدم
 # ===============================
 st.set_page_config(page_title="نظام اكتشاف الفاقد الكهربائي", page_icon="⚡", layout="wide")
-st.title("⚡ نظام اكتشاف حالات الفاقد الكهربائي المحتملة  ")
+st.title("⚡ نظام اكتشاف حالات الفاقد الكهربائي المحتملة")
 st.markdown("### 🏢 استخدام نهج التعلم الآلي والتعلم العميق في تحليل بيانات الأحمال الكهربائية لكشف حالات الفاقد")
 st.markdown("---")
 
 st.subheader("📥 تحميل نموذج البيانات المطلوب تحليله")
-template_file = "The_data_frame_file_to_be_analyzed.xlsx"
-st.download_button("📥 تحميل نموذج البيانات", open(template_file, "rb"), file_name=template_file)
+template_file = os.path.join(DATA_DIR, "The_data_frame_file_to_be_analyzed.xlsx")
+
+# التحقق من وجود ملف النموذج
+if check_file_exists(template_file, "نموذج البيانات"):
+    st.download_button("📥 تحميل نموذج البيانات", open(template_file, "rb"), file_name="The_data_frame_file_to_be_analyzed.xlsx")
 
 uploaded_file = st.file_uploader("🔼 رفع ملف بيانات الأحمال")
 if uploaded_file:
@@ -105,7 +126,7 @@ if uploaded_file:
     df_test["Loss_Explanation"] = df_test.apply(explain_loss, axis=1)
 
     # تصفية الحالات ذات الأولوية
-    high_priority_cases = df_test[(df_test["Anomaly"] == True) &
+    high_priority_cases = df_test[(df_test["Anomaly"]) &
                                   (df_test["XGB_Prediction"] == 1) &
                                   (df_test["LGBM_Prediction"] == 1) &
                                   (df_test["Stacked_Prediction"] == 1)]
@@ -116,7 +137,7 @@ if uploaded_file:
 
     # عرض البيانات في واجهة المستخدم
     st.subheader("🔍 تفاصيل الحالات ذات الأولوية العالية")
-    st.dataframe(high_priority_cases[["Meter Number", "V1", "V2", "V3", "A1", "A2", "A3", "Loss_Explanation"]])
+    st.dataframe(high_priority_cases[["V1", "V2", "V3", "A1", "A2", "A3", "Loss_Explanation"]])
 
     # إنشاء ملفات تحميل النتائج
     excel_buffer = io.BytesIO()
@@ -131,4 +152,4 @@ if uploaded_file:
     st.download_button("📥 تحميل جميع حالات الفاقد المحتملة", data=excel_buffer, file_name="Predicted_Losses.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 st.markdown("---")
-st.markdown("👨‍💻 **تطوير :** مشهور العباس | 00966553339838 |   ")
+st.markdown("👨‍💻 **تطوير :** مشهور العباس | 00966553339838 | ")
