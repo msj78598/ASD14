@@ -6,6 +6,8 @@ scikit-learn
 matplotlib
 seaborn
 joblib
+openpyxl
+
 
 # مكتبات التعلم الآلي والتعلم العميق
 tensorflow
