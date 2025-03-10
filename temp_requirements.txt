@@ -7,6 +7,8 @@ matplotlib
 seaborn
 joblib
 openpyxl
+xlsxwriter
+
 
 # مكتبات التعلم الآلي والتعلم العميق
 tensorflow
