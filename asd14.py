@@ -7,8 +7,8 @@ import streamlit as st
 import tensorflow as tf
 import matplotlib.pyplot as plt
 import io
+import urllib.request
 from tensorflow.keras.models import load_model
-from tensorflow.keras.losses import MeanSquaredError
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import StackingClassifier
 from xgboost import XGBClassifier
@@ -17,41 +17,43 @@ from lightgbm import LGBMClassifier
 # ===============================
 # 🔹 تعريف المسارات الرئيسية
 # ===============================
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # التعرف تلقائيًا على مسار الملف الحالي
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))  
 MODELS_DIR = os.path.join(BASE_DIR, "models")
-DATA_DIR = BASE_DIR  # إذا كانت البيانات في نفس مجلد الكود
+DATA_DIR = BASE_DIR  # إذا كانت البيانات في نفس المجلد
+os.makedirs(MODELS_DIR, exist_ok=True)  # إنشاء المجلد إذا لم يكن موجودًا
 
-os.makedirs(MODELS_DIR, exist_ok=True)
+# 🔹 روابط ملفات النماذج في GitHub
+GITHUB_REPO = "https://raw.githubusercontent.com/msj78598/ASD14/main/"  # غيّر إلى رابط مستودعك
+MODEL_FILES = {
+    "autoencoder_model.keras": os.path.join(MODELS_DIR, "autoencoder_model.keras"),
+    "xgboost_model.pkl": os.path.join(MODELS_DIR, "xgboost_model.pkl"),
+    "lightgbm_model.pkl": os.path.join(MODELS_DIR, "lightgbm_model.pkl"),
+    "stacked_model.pkl": os.path.join(MODELS_DIR, "stacked_model.pkl"),
+}
 
-# مسارات الملفات
-autoencoder_path = os.path.join(MODELS_DIR, "autoencoder_model.keras")
-xgb_path = os.path.join(MODELS_DIR, "xgboost_model.pkl")
-lgbm_path = os.path.join(MODELS_DIR, "lightgbm_model.pkl")
-stacked_path = os.path.join(MODELS_DIR, "stacked_model.pkl")
-accuracy_results_path = os.path.join(MODELS_DIR, "accuracy_results.json")
-train_data_path = os.path.join(DATA_DIR, "final_classified_loss_with_reasons_60_percent_ordered.xlsx")
+# 🔹 تحميل الملفات إذا لم تكن موجودة
+def download_model_files():
+    for file_name, file_path in MODEL_FILES.items():
+        if not os.path.exists(file_path):
+            url = GITHUB_REPO + file_name
+            try:
+                urllib.request.urlretrieve(url, file_path)
+                print(f"✅ تم تحميل {file_name} بنجاح!")
+            except Exception as e:
+                print(f"❌ فشل تحميل {file_name}: {e}")
 
-# ===============================
-# 🔹 التحقق من الملفات قبل تحميلها
-# ===============================
-def check_file_exists(file_path, file_type="ملف"):
-    """ التحقق مما إذا كان الملف موجودًا وإعطاء رسالة مناسبة """
-    if not os.path.exists(file_path):
-        st.error(f"❌ خطأ: {file_type} غير موجود! تأكد من رفعه: {file_path}")
-        return False
-    return True
-
-# التحقق من وجود ملفات البيانات والنماذج
-if not all([check_file_exists(autoencoder_path, "نموذج Autoencoder"),
-            check_file_exists(xgb_path, "نموذج XGBoost"),
-            check_file_exists(lgbm_path, "نموذج LightGBM"),
-            check_file_exists(stacked_path, "نموذج Stacked"),
-            check_file_exists(train_data_path, "ملف بيانات التدريب")]):
-    st.stop()  # إيقاف التطبيق إذا كانت هناك ملفات ناقصة
+# 🔹 تنزيل النماذج إذا لم تكن موجودة
+download_model_files()
 
 # ===============================
 # 🔹 تحميل البيانات المصنفة للتدريب
 # ===============================
+train_data_path = os.path.join(DATA_DIR, "final_classified_loss_with_reasons_60_percent_ordered.xlsx")
+
+if not os.path.exists(train_data_path):
+    st.error(f"❌ خطأ: ملف البيانات غير موجود! تأكد من رفعه: {train_data_path}")
+    st.stop()
+
 df = pd.read_excel(train_data_path)
 df.fillna(df.select_dtypes(include=[np.number]).mean(), inplace=True)
 df["Loss_Status"] = df["Loss_Status"].apply(lambda x: 1 if x == "Loss" else 0)
@@ -67,10 +69,15 @@ X_scaled = scaler.fit_transform(X)
 # ===============================
 # 🔹 تحميل النماذج المدربة
 # ===============================
-autoencoder = load_model(autoencoder_path, compile=False)
-xgb = joblib.load(xgb_path)
-lgbm = joblib.load(lgbm_path)
-stacked_model = joblib.load(stacked_path)
+try:
+    autoencoder = load_model(MODEL_FILES["autoencoder_model.keras"], compile=False)
+    xgb = joblib.load(MODEL_FILES["xgboost_model.pkl"])
+    lgbm = joblib.load(MODEL_FILES["lightgbm_model.pkl"])
+    stacked_model = joblib.load(MODEL_FILES["stacked_model.pkl"])
+    print("✅ تم تحميل جميع النماذج بنجاح!")
+except Exception as e:
+    st.error(f"❌ خطأ أثناء تحميل النماذج: {e}")
+    st.stop()
 
 # ===============================
 # 🔹 حساب العتبة المثلى للـ Autoencoder
@@ -91,7 +98,7 @@ st.subheader("📥 تحميل نموذج البيانات المطلوب تحل�
 template_file = os.path.join(DATA_DIR, "The_data_frame_file_to_be_analyzed.xlsx")
 
 # التحقق من وجود ملف النموذج
-if check_file_exists(template_file, "نموذج البيانات"):
+if os.path.exists(template_file):
     st.download_button("📥 تحميل نموذج البيانات", open(template_file, "rb"), file_name="The_data_frame_file_to_be_analyzed.xlsx")
 
 uploaded_file = st.file_uploader("🔼 رفع ملف بيانات الأحمال")
